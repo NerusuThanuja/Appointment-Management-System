@@ -1,5 +1,20 @@
 import streamlit as st
 import requests
+import sqlite3
+
+conn = sqlite3.connect("appointments.db", check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS appointments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    email TEXT,
+    date TEXT,
+    time TEXT
+)
+""")
+conn.commit()
 
 BACKEND_URL = "http://127.0.0.1:8000"
 

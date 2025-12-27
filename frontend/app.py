@@ -1,12 +1,16 @@
 import streamlit as st
-import requests
 import sqlite3
 
+# ---------------- DATABASE ----------------
 conn = sqlite3.connect("appointments.db", check_same_thread=False)
 cursor = conn.cursor()
 
+# DROP OLD TABLE (fixes column mismatch error)
+cursor.execute("DROP TABLE IF EXISTS appointments")
+
+# CREATE FRESH TABLE
 cursor.execute("""
-CREATE TABLE IF NOT EXISTS appointments (
+CREATE TABLE appointments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
     email TEXT,
@@ -16,11 +20,9 @@ CREATE TABLE IF NOT EXISTS appointments (
 """)
 conn.commit()
 
-BACKEND_URL = "http://127.0.0.1:8000"
-
-st.set_page_config(page_title="Appointment Management System", layout="centered")
-
-st.title("📅 Appointment Management System")
+# ---------------- UI ----------------
+st.set_page_config(page_title="Appointment Management System")
+st.title("Appointment Management System")
 
 st.subheader("Create Appointment")
 
@@ -29,45 +31,51 @@ email = st.text_input("Email ID")
 appointment_date = st.date_input("Appointment Date")
 appointment_time = st.time_input("Appointment Time")
 
+# ---------------- CREATE APPOINTMENT ----------------
 if st.button("Create Appointment"):
-    if name and email:
-        payload = {
-            "name": name,
-            "email": email,
-            "appointment_date": str(appointment_date),
-            "appointment_time": appointment_time.strftime("%I:%M %p")
-        }
-
-        response = requests.post(
-            f"{BACKEND_URL}/appointments",
-            json=payload
+    if not name or not email:
+        st.error("Please enter all details")
+    else:
+        cursor.execute(
+            """
+            SELECT * FROM appointments
+            WHERE email = ? AND date = ? AND time = ?
+            """,
+            (email.upper(), str(appointment_date), str(appointment_time))
         )
+        existing = cursor.fetchone()
 
-        if response.status_code == 200:
-            st.success("Appointment Created Successfully ✅")
+        if existing:
+            st.warning("Duplicate appointment not allowed")
         else:
-            st.error("Failed to create appointment ❌")
-    else:
-        st.warning("Please fill all fields")
-
-st.divider()
-
-st.subheader("📋 All Appointments")
-
-if st.button("View Appointments"):
-    response = requests.get(f"{BACKEND_URL}/appointments")
-
-    if response.status_code == 200:
-        appointments = response.json()
-        if appointments:
-            for appt in appointments:
-                st.write(
-                    f"**NAME:** {appt['NAME']} | "
-                    f"**EMAIL:** {appt['EMAIL']} | "
-                    f"**DATE:** {appt['APPOINTMENT_DATE']} | "
-                    f"**TIME:** {appt['APPOINTMENT_TIME']}"
+            cursor.execute(
+                """
+                INSERT INTO appointments (name, email, date, time)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    name.upper(),
+                    email.upper(),
+                    str(appointment_date),
+                    str(appointment_time)
                 )
-        else:
-            st.info("No appointments found")
-    else:
-        st.error("Failed to fetch appointments")
+            )
+            conn.commit()
+            st.success("Appointment created successfully")
+
+# ---------------- VIEW APPOINTMENTS ----------------
+st.divider()
+st.subheader("All Appointments")
+
+cursor.execute(
+    "SELECT name, email, date, time FROM appointments ORDER BY date, time"
+)
+appointments = cursor.fetchall()
+
+if appointments:
+    for appt in appointments:
+        st.write(
+            f"NAME: {appt[0]} | EMAIL: {appt[1]} | DATE: {appt[2]} | TIME: {appt[3]}"
+        )
+else:
+    st.info("No appointments found")
